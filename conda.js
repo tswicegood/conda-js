@@ -10,12 +10,17 @@ if ((typeof module === 'object' && typeof define !== 'function') || (window && w
     var ChildProcess = require('child_process');
     var Promise = require('promise');
 
+    // FIXME: I don't think `method` should get passed in here -- the web-based one
+    //        should be smart enough to know what type of command is being invoked
+    // FIXME: Is `url` or `data` needed here?
     var api = function(cmdList, method, url, data) {
         return new Promise(function(fulfill, reject) {
             var params = cmdList.concat(['--json']);
             var conda = ChildProcess.spawn('conda', params, {});
             var buffer = [];
             conda.stdout.on('data', function(data) {
+                // FIXME: You can call setEncoding on `stdout` to keep from having
+                //        to call `toString` all the time.
                 buffer.push(data.toString());
             });
             conda.on('close', function() {
@@ -81,6 +86,7 @@ if ((typeof module === 'object' && typeof define !== 'function') || (window && w
             callbacks.push(f);
         };
         promise.progress = function(data) {
+            // FIXME? Using `callbacks.forEach` would read a little cleaner
             for (var i = 0; i < callbacks.length; i++) {
                 callbacks[i](data);
             }
@@ -88,6 +94,7 @@ if ((typeof module === 'object' && typeof define !== 'function') || (window && w
         return promise;
     };
 
+    // FIXME: Let's pull this into a separate file so its separate for testing
     if (process.argv.length == 3 && process.argv[2] == '--server') {
         var express = require('express');
         var bodyParser = require('body-parser');
@@ -114,6 +121,9 @@ if ((typeof module === 'object' && typeof define !== 'function') || (window && w
                 // POST request
                 parts = req.param('command[]');
             }
+            // FIXME: I got `Handling undefined` when I ran this in Firefox:
+            //          conda.info().then(function(i) { console.log(i); })
+            // FIXME: Looks like this was a docs issue -- needed conda.DEV_SERVER=true
             console.log('Handling', parts);
             api(parts).then(function(data) {
                 res.send(JSON.stringify(data));
@@ -408,6 +418,8 @@ function factory(api, progressApi) {
             cmdList = cmdList.concat(options.packages);
         };
 
+        // FIXME: Not sure I get this API.
+        // FIXME: I don't think this return works as expected
         Env.getEnvs = function() {
             return info().then(function(info) {
                 var envs = [new Env('root', info.default_prefix)];
@@ -510,6 +522,10 @@ function factory(api, progressApi) {
             }
             var call = api(this.cmdList.concat(['--get', key]),
                            'get', ['config', 'getAll', key], this.data);
+
+            // FIXME: Shouldn't this return another Promise that operates on result
+            //        instead?  Returning inside this Promise doesn't get back to
+            //        calling code as best I can tell.
             return call.then(function(result) {
                 if (result.warnings.length) {
                     console.log("Warnings for conda config:");
@@ -540,6 +556,7 @@ function factory(api, progressApi) {
 
         // TODO disallow non iterable keys
         Config.prototype.add = function(key, value) {
+            // FIXME: This code is repeated a lot -- could use refactoring into a common decorator
             if (ALLOWED_KEYS.indexOf(key) === -1) {
                 throw new CondaError(
                     "Config.set: key " + key + " not allowed. Key must be one of "
@@ -628,6 +645,11 @@ function factory(api, progressApi) {
             throw new CondaError("conda.clean: at least one of indexCache, lock, tarballs, or packages required");
         }
 
+        // FIXME: The API we talked about looks like:
+        //            api('clean', {"indexCache": true, "tarballs": true})
+        //        That should simplify the call into api() since it'll be responsible
+        //        for turning that into something to execute on.  Should also make
+        //        testing easier, as it can be tested directly.
         return api(['clean'].concat(cmdList), 'post', ['clean'], options);
     };
 
